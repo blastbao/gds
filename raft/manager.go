@@ -81,14 +81,15 @@ func (r *Raft) GracefulShutdown() error {
 
 func (r *Raft) listenLeader() {
 	defer close(r.changeLeaderCh)
-
 	for {
 		select {
 		case _, ok := <-r.leaderObsCh:
 			if !ok {
 				return
 			}
+			// 当前 leader
 			currentLeader := r.r.Leader()
+			// 发布事件
 			select {
 			case r.changeLeaderCh <- ChangeLeaderNotification{
 				IsLeader:             r.r.State() == raft.Leader,

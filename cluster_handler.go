@@ -67,6 +67,11 @@ func (cl *ClusterHandler) HandleRemovePeerCommand(state store.WritableState, dat
 	return nil, nil
 }
 
+// HandleInsertJobCommand
+//
+// raft 集群中每个节点在收到 "InsertJobCommand" 消息时，都会执行此函数；
+// 但仅当前节点为 leader 时，才会执行 job assign 逻辑，其会提交 "AcquireJobCommand" 到状态机中，
+// 每个节点在收到 "AcquireJobCommand" 消息时，检查是否有自己的任务，有则进行处理。
 func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data []byte) (interface{}, error) {
 	// 参数解析
 	payload := cluster.InsertJob{}
@@ -89,7 +94,7 @@ func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data
 		return nil, err
 	}
 
-	///
+	// [重要]
 	if cl.cluster.IsLeader() {
 		cl.assignJobs([]string{job.Key()})
 	}
@@ -117,19 +122,22 @@ func (cl *ClusterHandler) HandleDeleteJobCommand(state store.WritableState, data
 }
 
 func (cl *ClusterHandler) HandleAcquireJobCommand(state store.WritableState, data []byte) (interface{}, error) {
+	// 解析消息
 	payload := cluster.AcquireJob{}
 	err := json.Unmarshal(data, &payload)
 	if err != nil {
 		return nil, errors.WithMessage(err, "unmarshal cluster.AcquireJob")
 	}
-
+	// 获取新提交的 jobs
 	for _, key := range payload.JobKeys {
+		// 获取 job info
 		jobInfo, err := state.GetJob(key)
 		if err != nil {
 			continue
 		}
 
 		// if duplicate assignment
+		// 如果 job 已经分配给某个 peer ，skip
 		if jobInfo.AssignedPeerID == payload.PeerID {
 			continue
 		}
@@ -138,7 +146,10 @@ func (cl *ClusterHandler) HandleAcquireJobCommand(state store.WritableState, dat
 			continue
 		}
 
+		// 更新状态机
 		state.AcquireJob(key, payload.PeerID)
+
+		// [重要] 如果 job 分配给自己，就执行
 		if cl.cluster.LocalID() == payload.PeerID {
 			cl.executor.AddJob(jobInfo.Job)
 		}
