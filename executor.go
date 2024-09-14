@@ -26,7 +26,7 @@ type executor interface {
 	CancelJob(key string) bool
 }
 
-type defaultRuntimeExecutor struct {
+type defaultExecutor struct {
 	registry         executorRegistry
 	wg               sync.WaitGroup
 	lock             sync.Mutex
@@ -37,7 +37,7 @@ type defaultRuntimeExecutor struct {
 	logger hclog.Logger
 }
 
-func (e *defaultRuntimeExecutor) CancelJob(job string) bool {
+func (e *defaultExecutor) CancelJob(job string) bool {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
@@ -51,7 +51,7 @@ func (e *defaultRuntimeExecutor) CancelJob(job string) bool {
 	return true
 }
 
-func (e *defaultRuntimeExecutor) Shutdown(ctx context.Context) error {
+func (e *defaultExecutor) Shutdown(ctx context.Context) error {
 	// try release not running triggers
 	e.lock.Lock()
 	for key, f := range e.futures {
@@ -77,7 +77,7 @@ func (e *defaultRuntimeExecutor) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (e *defaultRuntimeExecutor) AddJob(job jobs.Job) {
+func (e *defaultExecutor) AddJob(job jobs.Job) {
 	// Create a new future for the job
 	fu := &future{
 		job:      job,
@@ -108,7 +108,7 @@ func calculateDurationUntilNextTrigger(job jobs.Job) time.Duration {
 	return nextTime.Sub(now)
 }
 
-func (e *defaultRuntimeExecutor) makeF(f *future) func() {
+func (e *defaultExecutor) makeF(f *future) func() {
 	return func() {
 		if f.IsCanceled() {
 			return
@@ -119,13 +119,13 @@ func (e *defaultRuntimeExecutor) makeF(f *future) func() {
 	}
 }
 
-func (e *defaultRuntimeExecutor) runJob(f *future, now time.Time) {
+func (e *defaultExecutor) runJob(f *future, now time.Time) {
 	defer e.cleanup(f)
 	f.SetRunning()
 
 	exec, ok := e.registry.GetExecutor(f.job.Type())
 	if !ok {
-		e.logger.Error(fmt.Sprintf("defaultRuntimeExecutor: not found executor for job type: %v", f.job.Type()))
+		e.logger.Error(fmt.Sprintf("defaultExecutor: not found executor for job type: %v", f.job.Type()))
 		return
 	}
 
@@ -133,7 +133,7 @@ func (e *defaultRuntimeExecutor) runJob(f *future, now time.Time) {
 	defer e.wg.Done()
 	err := e.executeWithTimeout(exec, f.job)
 	if err != nil {
-		e.logger.Warn(fmt.Sprintf("defaultRuntimeExecutor: job %s type %s has finished with err '%v'", f.job.Key(), f.job.Type(), err))
+		e.logger.Warn(fmt.Sprintf("defaultExecutor: job %s type %s has finished with err '%v'", f.job.Key(), f.job.Type(), err))
 	}
 
 	// Job 执行完毕后，结果发送到 ch
@@ -144,7 +144,7 @@ func (e *defaultRuntimeExecutor) runJob(f *future, now time.Time) {
 	}
 }
 
-func (e *defaultRuntimeExecutor) executeWithTimeout(exec JobExecutor, job jobs.Job) error {
+func (e *defaultExecutor) executeWithTimeout(exec JobExecutor, job jobs.Job) error {
 	doneChan := make(chan error, 1)
 	go func() {
 		defer func() {
@@ -169,14 +169,14 @@ func (e *defaultRuntimeExecutor) executeWithTimeout(exec JobExecutor, job jobs.J
 	return <-doneChan
 }
 
-func (e *defaultRuntimeExecutor) cleanup(f *future) {
+func (e *defaultExecutor) cleanup(f *future) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	delete(e.futures, f.job.Key())
 	f.running.Set(false)
 }
 
-func newDefaultRuntimeExecutor(
+func newDefaultExecutor(
 	registry executorRegistry,
 	executedJobsCh chan<- cluster.JobExecuted,
 	executionTimeout time.Duration,
@@ -185,7 +185,7 @@ func newDefaultRuntimeExecutor(
 	if executionTimeout == 0 {
 		executionTimeout = DefaultJobExecutionTimeout
 	}
-	return &defaultRuntimeExecutor{
+	return &defaultExecutor{
 		registry:         registry,
 		futures:          make(map[string]*future),
 		executedJobsCh:   executedJobsCh,

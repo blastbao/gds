@@ -142,7 +142,7 @@ func NewScheduler(config config.ClusterConfiguration) (Scheduler, error) {
 	// Job 执行完毕后，结果发送到此 ch
 	executedJobsCh := make(chan cluster.JobExecuted, 100)
 	executorRegistry := newDefaultExecutorRegistry()
-	executor := newDefaultRuntimeExecutor(executorRegistry, executedJobsCh, config.JobExecutionTimeout, logger)
+	executor := newDefaultExecutor(executorRegistry, executedJobsCh, config.JobExecutionTimeout, logger)
 
 	typeProvider := provider.NewTypeProvider()
 	clusterHandler := NewClusterHandler(typeProvider, executor, logger)

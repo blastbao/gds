@@ -8,9 +8,9 @@ import (
 type JobExecutor func(jobs.Job) error
 
 type executorRegistry interface {
-	Register(jType string, executor JobExecutor)
-	Unregister(jType string)
-	GetExecutor(jType string) (JobExecutor, bool)
+	Register(typ string, executor JobExecutor)
+	Unregister(typ string)
+	GetExecutor(typ string) (JobExecutor, bool)
 }
 
 type defaultExecutorRegistry struct {
@@ -18,21 +18,21 @@ type defaultExecutorRegistry struct {
 	registry map[string]JobExecutor
 }
 
-func (r *defaultExecutorRegistry) Register(jType string, executor JobExecutor) {
+func (r *defaultExecutorRegistry) Register(typ string, executor JobExecutor) {
 	r.lock.Lock()
-	r.registry[jType] = executor
+	r.registry[typ] = executor
 	r.lock.Unlock()
 }
 
-func (r *defaultExecutorRegistry) Unregister(jType string) {
+func (r *defaultExecutorRegistry) Unregister(typ string) {
 	r.lock.Lock()
-	delete(r.registry, jType)
+	delete(r.registry, typ)
 	r.lock.Unlock()
 }
 
-func (r *defaultExecutorRegistry) GetExecutor(jType string) (JobExecutor, bool) {
+func (r *defaultExecutorRegistry) GetExecutor(typ string) (JobExecutor, bool) {
 	r.lock.RLock()
-	e, ok := r.registry[jType]
+	e, ok := r.registry[typ]
 	r.lock.RUnlock()
 	return e, ok
 }
