@@ -70,7 +70,7 @@ func main() {
 	// Register job type
 	scheduler.RegisterExecutor(jobType, jobExecutor, newJob)
 
-	// Wait until there will be leader in cluster. until that all ScheduleJob calls will fail
+	// Wait until there will be leader in cluster. until that all AddJob calls will fail
 	scheduler.WaitCluster(context.Background())
 
 	if !bench {
@@ -99,7 +99,7 @@ func main() {
 			panic(err)
 		}
 
-		err = scheduler.ScheduleJob(job)
+		err = scheduler.AddJob(job)
 		if err != nil {
 			panic(err)
 		}

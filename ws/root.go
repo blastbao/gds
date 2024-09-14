@@ -19,8 +19,7 @@ type SocketEventHandler struct {
 }
 
 func (h *SocketEventHandler) SubscribeAll() {
-	h.server.
-		OnConnect(h.handleConnect).
+	h.server.OnConnect(h.handleConnect).
 		OnDisconnect(h.handleDisconnect).
 		OnError(h.handleError).
 		OnWithAck(cluster.ApplyCommandEvent, h.applyCommandOnLeader)

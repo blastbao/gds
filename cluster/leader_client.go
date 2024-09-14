@@ -24,6 +24,7 @@ type SocketLeaderClient struct {
 func (c *SocketLeaderClient) Ack(data []byte, timeout time.Duration) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.globalCtx, timeout)
 	defer cancel()
+	// [重要] 通过 websocket 发送请求，然后同步的等待异步消息
 	response, err := c.client.EmitWithAck(ctx, ApplyCommandEvent, data)
 	return response, err
 }

@@ -33,7 +33,12 @@ type RaftAdapter struct {
 	logger hclog.Logger
 }
 
-func NewRaftAdapter(cfg config.ClusterConfiguration, handler store.CommandsHandler, typeProvider provider.TypeProvider, logger hclog.Logger) (*RaftAdapter, error) {
+func NewRaftAdapter(
+	cfg config.ClusterConfiguration,
+	handler store.CommandsHandler,
+	typeProvider provider.TypeProvider,
+	logger hclog.Logger,
+) (*RaftAdapter, error) {
 	adapter := &RaftAdapter{
 		Config: cfg,
 		logger: logger,
@@ -95,8 +100,12 @@ func (ra *RaftAdapter) initWebsocket(ctx context.Context, listener net.Listener)
 	ra.HTTPServer = httpServer
 }
 
-func (ra *RaftAdapter) initRaft(listener net.Listener, clusterCfg config.ClusterConfiguration,
-	commandsHandler store.CommandsHandler, typeProvider provider.TypeProvider) error {
+func (ra *RaftAdapter) initRaft(
+	listener net.Listener,
+	clusterCfg config.ClusterConfiguration,
+	commandsHandler store.CommandsHandler,
+	typeProvider provider.TypeProvider,
+) error {
 	raftStore := store.NewStore(commandsHandler, typeProvider)
 	r, err := raft.NewRaft(listener, clusterCfg, raftStore, ra.logger)
 	if err != nil {

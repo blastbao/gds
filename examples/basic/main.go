@@ -34,7 +34,6 @@ func main() {
 		return &jobs.OneTimeJob{Data: new(testStruct)}
 	}
 	jobType := "test_job"
-
 	jobExecutor := func(job jobs.Job) error {
 		oneTimeJob := job.(*jobs.OneTimeJob)
 		payload := oneTimeJob.Data.(*testStruct)
@@ -45,7 +44,7 @@ func main() {
 	// Register job type
 	scheduler.RegisterExecutor(jobType, jobExecutor, newJob)
 
-	// Wait until there will be leader in cluster. Until that all ScheduleJob calls will fail
+	// Wait until there will be leader in cluster. Until that all AddJob calls will fail
 	scheduler.WaitCluster(context.Background())
 
 	jobPayload := testStruct{Data: "1!"}
@@ -56,7 +55,7 @@ func main() {
 		panic(err)
 	}
 
-	err = scheduler.ScheduleJob(job)
+	err = scheduler.AddJob(job)
 	if err != nil {
 		panic(err)
 	}

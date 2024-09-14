@@ -21,9 +21,9 @@ type Scheduler interface {
 	RegisterExecutor(jobType string, executor JobExecutor, newJobFunc provider.NewJobFunc) Scheduler
 	UnregisterExecutor(jobType string)
 
-	ScheduleJob(job jobs.Job) error
+	AddJob(job jobs.Job) error
 	GetJob(key string) (*store.JobInfo, error)
-	DeleteJob(key string) error
+	DelJob(key string) error
 	GetAllJobs() []store.JobInfo
 	GetJobsByType(jobType string) []store.JobInfo
 }
@@ -36,21 +36,26 @@ type scheduler struct {
 	raftAdapter  *RaftAdapter
 }
 
-func (s *scheduler) ScheduleJob(job jobs.Job) error {
+func (s *scheduler) AddJob(job jobs.Job) error {
+	// 已经存在？
 	var err error
 	s.store.VisitReadonlyState(func(state store.ReadonlyState) {
 		_, err = state.GetJob(job.Key())
 	})
-
 	if err == nil {
 		return store.ErrJobAlreadyExists
 	}
 
+	// 序列化
 	b, err := job.Marshal()
 	if err != nil {
 		return err
 	}
+
+	// 构造 cmd
 	cmd := cluster.PrepareInsertJobCommand(job.Type(), b)
+
+	//
 	_, err = s.raftAdapter.ClusterClient.SyncApplyHelper(cmd, "InsertJobCommand")
 	return err
 }
@@ -66,12 +71,11 @@ func (s *scheduler) GetJob(key string) (*store.JobInfo, error) {
 	return job, err
 }
 
-func (s *scheduler) DeleteJob(key string) error {
+func (s *scheduler) DelJob(key string) error {
 	var err error
 	s.store.VisitReadonlyState(func(state store.ReadonlyState) {
 		_, err = state.GetJob(key)
 	})
-
 	if err != nil {
 		return err
 	}

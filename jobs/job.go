@@ -48,9 +48,9 @@ type Job interface {
 	Key() string
 	Type() string
 
-	// Should return Time.IsZero() when job is done.
+	// NextTriggerTime Should return Time.IsZero() when job is done.
 	NextTriggerTime() time.Time
-	// Used to count executions and post-processing.
+	// PostExecution Used to count executions and post-processing.
 	PostExecution(time.Time, error)
 
 	Marshaler

@@ -64,6 +64,7 @@ func (r *Raft) SyncApply(command []byte) (interface{}, error) {
 	if err := f.Error(); err != nil {
 		return nil, err
 	}
+	// f.Response 返回 fsm 对应 cmd 的 result
 	return f.Response(), nil
 }
 

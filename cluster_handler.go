@@ -68,12 +68,14 @@ func (cl *ClusterHandler) HandleRemovePeerCommand(state store.WritableState, dat
 }
 
 func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data []byte) (interface{}, error) {
+	// 参数解析
 	payload := cluster.InsertJob{}
 	err := json.Unmarshal(data, &payload)
 	if err != nil {
 		return nil, errors.WithMessage(err, "unmarshal cluster.InsertJob")
 	}
 
+	// 根据 type 范序列化 payload.Job ，因为不同 type 其配置结构不同
 	f := cl.typeProvider.Get(payload.Type)
 	job := f()
 	err = job.Unmarshal(payload.Job)
@@ -81,11 +83,13 @@ func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data
 		return nil, errors.WithMessage(err, "unmarshal job data")
 	}
 
+	// 把 job 保存到 raft
 	err = state.InsertJob(job)
 	if err != nil {
 		return nil, err
 	}
 
+	///
 	if cl.cluster.IsLeader() {
 		cl.assignJobs([]string{job.Key()})
 	}
@@ -97,7 +101,7 @@ func (cl *ClusterHandler) HandleDeleteJobCommand(state store.WritableState, data
 	payload := cluster.DeleteJob{}
 	err := json.Unmarshal(data, &payload)
 	if err != nil {
-		return nil, errors.WithMessage(err, "unmarshal cluster.DeleteJob")
+		return nil, errors.WithMessage(err, "unmarshal cluster.DelJob")
 	}
 
 	jobInfo, err := state.GetJob(payload.Key)
@@ -167,9 +171,10 @@ func (cl *ClusterHandler) HandleJobExecutedCommand(state store.WritableState, da
 
 func (cl *ClusterHandler) GetHandlers() map[uint64]func(store.WritableState, []byte) (interface{}, error) {
 	return map[uint64]func(store.WritableState, []byte) (interface{}, error){
+		// peer manage
 		cluster.AddPeerCommand:    cl.HandleAddPeerCommand,
 		cluster.RemovePeerCommand: cl.HandleRemovePeerCommand,
-
+		// job manage
 		cluster.InsertJobCommand:   cl.HandleInsertJobCommand,
 		cluster.DeleteJobCommand:   cl.HandleDeleteJobCommand,
 		cluster.AcquireJobCommand:  cl.HandleAcquireJobCommand,
@@ -180,17 +185,21 @@ func (cl *ClusterHandler) GetHandlers() map[uint64]func(store.WritableState, []b
 func (cl *ClusterHandler) listenLeaderCh(mainStore *store.Store) {
 	closeCh := make(chan struct{})
 	for isLeader := range cl.cluster.LeaderCh() {
+		// 非 leader ，直接 continue 等待下一次变更
 		if !isLeader {
 			close(closeCh)
 			continue
 		}
+		// 成为 leader ，启动 leader 协程
+		// 1.
+		// 2.
+		// 3. 监听新任务提交，绑定到指定 peer 上；
 		closeCh = make(chan struct{})
 		assignJobsCh := make(chan []string, batchSize)
 		// TODO get rid of mutex
 		cl.assignJobsChLock.Lock()
 		cl.assignJobsCh = assignJobsCh
 		cl.assignJobsChLock.Unlock()
-
 		go cl.checkPeers(closeCh, mainStore.VisitReadonlyState)
 		go cl.checkJobs(closeCh, mainStore.VisitReadonlyState)
 		go cl.backgroundAssigningJobs(closeCh, assignJobsCh)
@@ -259,8 +268,11 @@ func (cl *ClusterHandler) backgroundAssigningJobs(closeCh chan struct{}, assignJ
 	defer ticker.Stop()
 
 	sendEvents := func(keys []string) {
+		// round robin 取下一个 peer
 		peerID := cl.nextPeer.Get()
+		// 把任务绑定到 peer 上
 		cmd := cluster.PrepareAcquireJobCommand(keys, peerID)
+		// 提交到 raft 状态机
 		_, _ = cl.cluster.SyncApplyHelper(cmd, "AcquireJobCommand")
 	}
 
@@ -268,6 +280,7 @@ func (cl *ClusterHandler) backgroundAssigningJobs(closeCh chan struct{}, assignJ
 		select {
 		case newJobKeys := <-assignJobsCh:
 			jobKeys = append(jobKeys, newJobKeys...)
+
 			if len(jobKeys) >= 2*batchSize {
 				// TODO send batches async in select?
 				var batches [][]string
@@ -285,6 +298,7 @@ func (cl *ClusterHandler) backgroundAssigningJobs(closeCh chan struct{}, assignJ
 				sendEvents(jobKeys)
 				jobKeys = jobKeys[:0]
 			}
+
 		case <-ticker.C:
 			if len(jobKeys) == 0 {
 				continue

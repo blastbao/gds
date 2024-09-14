@@ -54,7 +54,7 @@ func TestScheduler_InsertDelete(t *testing.T) {
 	job, err := jobs.NewOneTimeJob(jobType, key, time.Now().Add(500*time.Millisecond), jobPayload)
 	a.NoError(err)
 
-	err = schedulers[0].ScheduleJob(job)
+	err = schedulers[0].AddJob(job)
 	a.NoError(err)
 
 	time.Sleep(200 * time.Millisecond)
@@ -62,7 +62,7 @@ func TestScheduler_InsertDelete(t *testing.T) {
 	a.NoError(err)
 	a.True(jobInfo.State == jobs.StateScheduled)
 
-	err = schedulers[1].DeleteJob(key)
+	err = schedulers[1].DelJob(key)
 	a.NoError(err)
 
 	time.Sleep(1 * time.Second)
@@ -105,7 +105,7 @@ func TestScheduler_InsertRemovePeerAndReschedule(t *testing.T) {
 	job, err := jobs.NewOneTimeJob(jobType, key, time.Now().Add(4*time.Second), jobPayload)
 	a.NoError(err)
 
-	err = schedulers[2].ScheduleJob(job)
+	err = schedulers[2].AddJob(job)
 	a.NoError(err)
 
 	time.Sleep(200 * time.Millisecond)
@@ -209,7 +209,7 @@ func BenchmarkSchedulerScheduleJob(b *testing.B) {
 
 		schedulerNumber := i % instancesNumber
 		b.StartTimer()
-		err = schedulers[schedulerNumber].ScheduleJob(job)
+		err = schedulers[schedulerNumber].AddJob(job)
 		if err != nil {
 			panic(err)
 		}
@@ -273,7 +273,7 @@ func genericTestSchedulerScheduleJob(t *testing.T, instancesNumber, startPort in
 		job, err := jobs.NewOneTimeJob(jobType, key, time.Now().Add(time.Second), jobPayload)
 		a.NoError(err)
 
-		err = schedulers[schedulerNumber].ScheduleJob(job)
+		err = schedulers[schedulerNumber].AddJob(job)
 		a.NoError(err)
 	}
 

@@ -51,7 +51,6 @@ func (client *Client) IsLeader() bool {
 	client.leaderMu.RLock()
 	leader := client.leaderState.isLeader
 	client.leaderMu.RUnlock()
-
 	return leader
 }
 
@@ -83,11 +82,11 @@ func (client *Client) LeaderCh() <-chan bool {
 func (client *Client) SyncApply(command []byte) (*ApplyLogResponse, error) {
 	client.leaderMu.RLock()
 	defer client.leaderMu.RUnlock()
-
 	if !client.leaderState.leaderElected {
 		return nil, ErrNoLeader
 	}
 
+	// 如果是 leader ，直接提交到 raft
 	if client.leaderState.isLeader {
 		apply, err := client.r.SyncApply(command)
 		if err != nil {
@@ -97,6 +96,7 @@ func (client *Client) SyncApply(command []byte) (*ApplyLogResponse, error) {
 		return &logResponse, err
 	}
 
+	// 如果非 leader ，把消息转发给 leader （内部通过 ws 协议，因为 raft 操作是长时的，同步等待会占用连接、浪费资源，使用 ws 比较合适）
 	if client.leaderClient == nil {
 		return nil, ErrLeaderClientNotInitialized
 	}
@@ -115,7 +115,6 @@ func (client *Client) SyncApply(command []byte) (*ApplyLogResponse, error) {
 func (client *Client) SyncApplyOnLeader(command []byte) (*ApplyLogResponse, error) {
 	client.leaderMu.RLock()
 	defer client.leaderMu.RUnlock()
-
 	if !client.leaderState.isLeader {
 		return nil, ErrNotLeader
 	}
@@ -128,11 +127,13 @@ func (client *Client) SyncApplyOnLeader(command []byte) (*ApplyLogResponse, erro
 }
 
 func (client *Client) SyncApplyHelper(command []byte, commandName string) (interface{}, error) {
+	// 提交 cmd 到 raft ，如果是 leader 提交到本地 fsm 否则转发给 leader
 	applyLogResponse, err := client.SyncApply(command)
 	if err != nil {
 		client.logger.Warn(fmt.Sprintf("apply %s: %v", commandName, err))
 		return nil, err
 	}
+	// 出错
 	if applyLogResponse != nil && applyLogResponse.ApplyError != "" {
 		client.logger.Warn("apply command",
 			"result", string(applyLogResponse.Result),
@@ -141,6 +142,7 @@ func (client *Client) SyncApplyHelper(command []byte, commandName string) (inter
 		)
 		return applyLogResponse.Result, errors.New(applyLogResponse.ApplyError)
 	}
+	// 成功
 	return applyLogResponse.Result, nil
 }
 

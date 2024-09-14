@@ -36,11 +36,13 @@ func (s *Store) Apply(l *raft.Log) interface{} {
 		}
 	}()
 
+	// 前 8B 是 cmd
 	if len(l.Data) < 8 {
 		s.logger.Error(fmt.Sprintf("invalid log data command: %s", l.Data))
 	}
 	command := binary.BigEndian.Uint64(l.Data[:8])
 
+	// 根据 cmd 取 handler ，并执行
 	var (
 		result interface{}
 		err    error
@@ -55,11 +57,11 @@ func (s *Store) Apply(l *raft.Log) interface{} {
 		)
 	}
 
+	// 构造 rsp 并返回
 	bytes, e := json.Marshal(result)
 	if e != nil {
 		panic(e) // must never occurred
 	}
-
 	logResponse := cluster.ApplyLogResponse{Result: bytes}
 	if err != nil {
 		logResponse.ApplyError = err.Error()
