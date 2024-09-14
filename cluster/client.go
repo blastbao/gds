@@ -44,7 +44,7 @@ func (client *Client) Shutdown() error {
 		client.leaderClient = nil
 	}
 
-	return client.r.GracefulShutdown()
+	return client.r.Shutdown()
 }
 
 func (client *Client) IsLeader() bool {
@@ -154,7 +154,7 @@ func (client *Client) listenLeaderNotifications() {
 		close(client.leaderCh)
 	}()
 
-	for n := range client.r.LeaderNotificationsCh() {
+	for n := range client.r.LeaderChangeCh() {
 		client.leaderMu.Lock()
 		if client.leaderClient != nil {
 			client.logger.Debug(fmt.Sprintf("close previous leader ws connection %s", client.leaderState.leaderAddr))

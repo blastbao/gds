@@ -13,16 +13,16 @@ import (
 )
 
 type SocketLeaderClient struct {
-	client    etp.Client
-	url       string
-	globalCtx context.Context
-	cancel    context.CancelFunc
+	client etp.Client
+	url    string
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	logger hclog.Logger
 }
 
 func (c *SocketLeaderClient) Ack(data []byte, timeout time.Duration) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(c.globalCtx, timeout)
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
 	defer cancel()
 	// [重要] 通过 websocket 发送请求，然后同步的等待异步消息
 	response, err := c.client.EmitWithAck(ctx, ApplyCommandEvent, data)
@@ -32,9 +32,9 @@ func (c *SocketLeaderClient) Ack(data []byte, timeout time.Duration) ([]byte, er
 func (c *SocketLeaderClient) Dial(timeout time.Duration) error {
 	backOff := backoff.NewExponentialBackOff()
 	backOff.MaxElapsedTime = timeout
-	bf := backoff.WithContext(backOff, c.globalCtx)
+	bf := backoff.WithContext(backOff, c.ctx)
 	dial := func() error {
-		return c.client.Dial(c.globalCtx, c.url)
+		return c.client.Dial(c.ctx, c.url)
 	}
 	return backoff.Retry(dial, bf)
 }
@@ -59,7 +59,7 @@ func NewSocketLeaderClient(leaderAddr, localID string, logger hclog.Logger) *Soc
 		url:    getURL(leaderAddr, localID),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	leaderClient.globalCtx = ctx
+	leaderClient.ctx = ctx
 	leaderClient.cancel = cancel
 
 	leaderClient.client.OnDisconnect(func(err error) {

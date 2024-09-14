@@ -18,7 +18,7 @@ const (
 	connectIOTimeout   = 2 * time.Second
 )
 
-type ChangeLeaderNotification struct {
+type LeaderChangeNotification struct {
 	CurrentLeaderAddress string
 	IsLeader             bool
 	LeaderElected        bool
@@ -29,7 +29,7 @@ type Raft struct {
 	cfg            config.ClusterConfiguration
 	leaderObs      *raft.Observer
 	leaderObsCh    chan raft.Observation
-	changeLeaderCh chan ChangeLeaderNotification
+	leaderChangeCh chan LeaderChangeNotification
 	closer         chan struct{}
 }
 
@@ -51,16 +51,15 @@ func (r *Raft) Servers() ([]raft.Server, error) {
 }
 
 func (r *Raft) BootstrapCluster() error {
-	peers := makeConfiguration(r.cfg.Peers)
-
+	peers := makeRaftConfig(r.cfg.Peers)
 	if f := r.r.BootstrapCluster(peers); f.Error() != nil {
 		return errors.WithMessage(f.Error(), "bootstrap cluster")
 	}
 	return nil
 }
 
-func (r *Raft) SyncApply(command []byte) (interface{}, error) {
-	f := r.r.Apply(command, defaultSyncTimeout)
+func (r *Raft) SyncApply(cmd []byte) (interface{}, error) {
+	f := r.r.Apply(cmd, defaultSyncTimeout)
 	if err := f.Error(); err != nil {
 		return nil, err
 	}
@@ -68,11 +67,11 @@ func (r *Raft) SyncApply(command []byte) (interface{}, error) {
 	return f.Response(), nil
 }
 
-func (r *Raft) LeaderNotificationsCh() <-chan ChangeLeaderNotification {
-	return r.changeLeaderCh
+func (r *Raft) LeaderChangeCh() <-chan LeaderChangeNotification {
+	return r.leaderChangeCh
 }
 
-func (r *Raft) GracefulShutdown() error {
+func (r *Raft) Shutdown() error {
 	r.r.DeregisterObserver(r.leaderObs)
 	close(r.closer)
 	close(r.leaderObsCh)
@@ -80,7 +79,7 @@ func (r *Raft) GracefulShutdown() error {
 }
 
 func (r *Raft) listenLeader() {
-	defer close(r.changeLeaderCh)
+	defer close(r.leaderChangeCh)
 	for {
 		select {
 		case _, ok := <-r.leaderObsCh:
@@ -91,7 +90,7 @@ func (r *Raft) listenLeader() {
 			currentLeader := r.r.Leader()
 			// 发布 leader 变更事件
 			select {
-			case r.changeLeaderCh <- ChangeLeaderNotification{
+			case r.leaderChangeCh <- LeaderChangeNotification{
 				IsLeader:             r.r.State() == raft.Leader,
 				CurrentLeaderAddress: string(currentLeader),
 				LeaderElected:        currentLeader != "",
@@ -108,7 +107,7 @@ func (r *Raft) listenLeader() {
 }
 
 func NewRaft(tcpListener net.Listener, configuration config.ClusterConfiguration, state raft.FSM, logger hclog.Logger) (*Raft, error) {
-	logStore, store, snapshotStore, err := makeStores(configuration)
+	logStore, store, snapshotStore, err := makeRaftStores(configuration)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +138,7 @@ func NewRaft(tcpListener net.Listener, configuration config.ClusterConfiguration
 		cfg:            configuration,
 		leaderObs:      leaderObs,
 		leaderObsCh:    leaderObsCh,
-		changeLeaderCh: make(chan ChangeLeaderNotification, 10),
+		leaderChangeCh: make(chan LeaderChangeNotification, 10),
 		closer:         make(chan struct{}),
 	}
 	go raft.listenLeader()
@@ -156,7 +155,7 @@ func makeLeaderObserver() (*raft.Observer, chan raft.Observation) {
 	return obs, ch
 }
 
-func makeConfiguration(peers []string) raft.Configuration {
+func makeRaftConfig(peers []string) raft.Configuration {
 	servers := make([]raft.Server, len(peers))
 	for i, peer := range peers {
 		servers[i] = raft.Server{
@@ -169,22 +168,19 @@ func makeConfiguration(peers []string) raft.Configuration {
 	}
 }
 
-func makeStores(configuration config.ClusterConfiguration) (raft.LogStore, raft.StableStore, raft.SnapshotStore, error) {
-	if configuration.InMemory {
+func makeRaftStores(cfg config.ClusterConfiguration) (raft.LogStore, raft.StableStore, raft.SnapshotStore, error) {
+	if cfg.InMemory {
 		dbStore := raft.NewInmemStore()
 		snapStore := raft.NewInmemSnapshotStore()
 		return dbStore, dbStore, snapStore, nil
 	}
-
-	dbStore, err := raftboltdb.NewBoltStore(filepath.Join(configuration.DataDir, dbFile))
+	dbStore, err := raftboltdb.NewBoltStore(filepath.Join(cfg.DataDir, dbFile))
 	if err != nil {
 		return nil, nil, nil, errors.WithMessage(err, "create db")
 	}
-
-	snapStore, err := raft.NewFileSnapshotStore(configuration.DataDir, 2, os.Stdout)
+	snapStore, err := raft.NewFileSnapshotStore(cfg.DataDir, 2, os.Stdout)
 	if err != nil {
 		return nil, nil, nil, errors.WithMessage(err, "create snapshot store")
 	}
-
 	return dbStore, dbStore, snapStore, nil
 }
