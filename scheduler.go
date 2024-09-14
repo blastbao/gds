@@ -138,12 +138,13 @@ func NewScheduler(config config.ClusterConfiguration) (Scheduler, error) {
 	} else {
 		logger = hclog.Default().Named("gds")
 	}
-	executedJobsCh := make(chan cluster.JobExecuted, 100)
 
-	typeProvider := provider.NewTypeProvider()
+	// Job 执行完毕后，结果发送到此 ch
+	executedJobsCh := make(chan cluster.JobExecuted, 100)
 	executorRegistry := newDefaultExecutorRegistry()
 	executor := newDefaultRuntimeExecutor(executorRegistry, executedJobsCh, config.JobExecutionTimeout, logger)
 
+	typeProvider := provider.NewTypeProvider()
 	clusterHandler := NewClusterHandler(typeProvider, executor, logger)
 
 	raftAdapter, err := NewRaftAdapter(config, clusterHandler, typeProvider, logger)
@@ -161,7 +162,7 @@ func NewScheduler(config config.ClusterConfiguration) (Scheduler, error) {
 
 	clusterHandler.cluster = raftAdapter.ClusterClient
 	go clusterHandler.listenLeaderCh(raftAdapter.RaftStore)
-	go clusterHandler.handleExecutedJobs(executedJobsCh)
+	go clusterHandler.handleExecutedJobs(executedJobsCh) // 将已完成任务状态保存到 raft lsm 上
 
 	return s, nil
 }

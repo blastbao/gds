@@ -40,7 +40,7 @@ func TestStore_SnapshotRestore(t *testing.T) {
 	a.NoError(err)
 	err = state.InsertJob(j)
 	a.NoError(err)
-	state.AcquireJob("j-1", "peerid1")
+	state.AssignJob("j-1", "peerid1")
 
 	store := &Store{
 		state:        state,

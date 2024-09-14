@@ -23,7 +23,7 @@ type DeleteJob struct {
 	Key string
 }
 
-type AcquireJob struct {
+type AssignJob struct {
 	JobKeys []string
 	PeerID  string
 }

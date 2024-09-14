@@ -26,6 +26,6 @@ func (f *future) IsCanceled() bool {
 	return f.canceled.Get()
 }
 
-func (f *future) Run() {
+func (f *future) SetRunning() {
 	f.running.Set(true)
 }

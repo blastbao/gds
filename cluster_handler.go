@@ -70,8 +70,8 @@ func (cl *ClusterHandler) HandleRemovePeerCommand(state store.WritableState, dat
 // HandleInsertJobCommand
 //
 // raft 集群中每个节点在收到 "InsertJobCommand" 消息时，都会执行此函数；
-// 但仅当前节点为 leader 时，才会执行 job assign 逻辑，其会提交 "AcquireJobCommand" 到状态机中，
-// 每个节点在收到 "AcquireJobCommand" 消息时，检查是否有自己的任务，有则进行处理。
+// 但仅当前节点为 leader 时，才会执行 job assign 逻辑，其会提交 "AssignJobCommand" 到状态机中，
+// 每个节点在收到 "AssignJobCommand" 消息时，检查是否有自己的任务，有则进行处理。
 func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data []byte) (interface{}, error) {
 	// 参数解析
 	payload := cluster.InsertJob{}
@@ -121,12 +121,12 @@ func (cl *ClusterHandler) HandleDeleteJobCommand(state store.WritableState, data
 	return nil, nil
 }
 
-func (cl *ClusterHandler) HandleAcquireJobCommand(state store.WritableState, data []byte) (interface{}, error) {
+func (cl *ClusterHandler) HandleAssignJobCommand(state store.WritableState, data []byte) (interface{}, error) {
 	// 解析消息
-	payload := cluster.AcquireJob{}
+	payload := cluster.AssignJob{}
 	err := json.Unmarshal(data, &payload)
 	if err != nil {
-		return nil, errors.WithMessage(err, "unmarshal cluster.AcquireJob")
+		return nil, errors.WithMessage(err, "unmarshal cluster.AssignJob")
 	}
 	// 获取新提交的 jobs
 	for _, key := range payload.JobKeys {
@@ -147,7 +147,7 @@ func (cl *ClusterHandler) HandleAcquireJobCommand(state store.WritableState, dat
 		}
 
 		// 更新状态机
-		state.AcquireJob(key, payload.PeerID)
+		state.AssignJob(key, payload.PeerID)
 
 		// [重要] 如果 job 分配给自己，就执行
 		if cl.cluster.LocalID() == payload.PeerID {
@@ -188,7 +188,7 @@ func (cl *ClusterHandler) GetHandlers() map[uint64]func(store.WritableState, []b
 		// job manage
 		cluster.InsertJobCommand:   cl.HandleInsertJobCommand,
 		cluster.DeleteJobCommand:   cl.HandleDeleteJobCommand,
-		cluster.AcquireJobCommand:  cl.HandleAcquireJobCommand,
+		cluster.AssignJobCommand:   cl.HandleAssignJobCommand,
 		cluster.JobExecutedCommand: cl.HandleJobExecutedCommand,
 	}
 }
@@ -213,7 +213,7 @@ func (cl *ClusterHandler) listenLeaderCh(mainStore *store.Store) {
 		cl.assignJobsChLock.Unlock()
 		go cl.checkPeers(closeCh, mainStore.VisitReadonlyState)
 		go cl.checkJobs(closeCh, mainStore.VisitReadonlyState)
-		go cl.backgroundAssigningJobs(closeCh, assignJobsCh)
+		go cl.assigningJobs(closeCh, assignJobsCh)
 	}
 }
 
@@ -230,21 +230,21 @@ func (cl *ClusterHandler) checkPeers(closeCh chan struct{}, visitState func(f fu
 	visitState(func(state store.ReadonlyState) {
 		oldServers = state.GetPeers()
 	})
+
 	var newServers []string
 	newServers, err := cl.cluster.Servers()
-	// error only occurs during leadership transferring, so there will be new leader soon
 	if err != nil {
+		// error only occurs during leadership transferring, so there will be new leader soon
 		return
 	}
-	_, deleted := utils.CompareSlices(oldServers, newServers)
 
+	_, deleted := utils.CompareSlices(oldServers, newServers)
 	for _, peerID := range deleted {
 		select {
 		case <-closeCh:
 			return
 		default:
 		}
-
 		cmd := cluster.PrepareRemovePeerCommand(peerID)
 		_, _ = cl.cluster.SyncApplyHelper(cmd, "RemovePeerCommand")
 	}
@@ -268,55 +268,52 @@ func (cl *ClusterHandler) checkJobs(closeCh chan struct{}, visitState func(f fun
 	cl.assignJobs(unassignedJobsKeys)
 }
 
-func (cl *ClusterHandler) backgroundAssigningJobs(closeCh chan struct{}, assignJobsCh chan []string) {
+func (cl *ClusterHandler) assigningJobs(closeCh chan struct{}, assignJobsCh chan []string) {
 	defer func() {
 		if err := recover(); err != nil {
 			cl.logger.Error(fmt.Sprintf("panic on assigning jobs: %v", err))
 		}
 	}()
-	jobKeys := make([]string, 0, batchSize)
 	ticker := time.NewTicker(assigningInterval)
 	defer ticker.Stop()
 
-	sendEvents := func(keys []string) {
+	assignJobsFn := func(keys []string) {
 		// round robin 取下一个 peer
 		peerID := cl.nextPeer.Get()
 		// 把任务绑定到 peer 上
-		cmd := cluster.PrepareAcquireJobCommand(keys, peerID)
+		cmd := cluster.PrepareAssignJobCommand(keys, peerID)
 		// 提交到 raft 状态机
-		_, _ = cl.cluster.SyncApplyHelper(cmd, "AcquireJobCommand")
+		_, _ = cl.cluster.SyncApplyHelper(cmd, "AssignJobCommand")
 	}
+
+	jobs := make([]string, 0, batchSize)
 
 	for {
 		select {
-		case newJobKeys := <-assignJobsCh:
-			jobKeys = append(jobKeys, newJobKeys...)
-
-			if len(jobKeys) >= 2*batchSize {
+		case assignJobs := <-assignJobsCh:
+			jobs = append(jobs, assignJobs...)
+			if len(jobs) >= 2*batchSize {
 				// TODO send batches async in select?
 				var batches [][]string
-				for batchSize < len(jobKeys) {
-					jobKeys, batches = jobKeys[batchSize:], append(batches, jobKeys[0:batchSize:batchSize])
+				for batchSize < len(jobs) {
+					jobs, batches = jobs[batchSize:], append(batches, jobs[0:batchSize:batchSize])
 				}
-				batches = append(batches, jobKeys)
+				batches = append(batches, jobs)
 				for _, batch := range batches {
-					sendEvents(batch)
+					assignJobsFn(batch)
 				}
 				// create new slice to allow gc previous big one
-				jobKeys = make([]string, 0, batchSize)
-			} else if len(jobKeys) >= batchSize {
-				jobKeys = utils.MakeUnique(jobKeys)
-				sendEvents(jobKeys)
-				jobKeys = jobKeys[:0]
+				jobs = make([]string, 0, batchSize)
+			} else if len(jobs) >= batchSize {
+				assignJobsFn(utils.MakeUnique(jobs))
+				jobs = jobs[:0]
 			}
-
 		case <-ticker.C:
-			if len(jobKeys) == 0 {
+			if len(jobs) == 0 {
 				continue
 			}
-			jobKeys = utils.MakeUnique(jobKeys)
-			sendEvents(jobKeys)
-			jobKeys = jobKeys[:0]
+			assignJobsFn(utils.MakeUnique(jobs))
+			jobs = jobs[:0]
 		case <-closeCh:
 			return
 		}
@@ -341,6 +338,8 @@ func (cl *ClusterHandler) handleExecutedJobs(executedJobsCh <-chan cluster.JobEx
 			cl.logger.Error(fmt.Sprintf("panic on executed jobs: %v", err))
 		}
 	}()
+
+	// Job 执行完毕后，结果发送到此 ch ，需要 apply 到 lsm 上记录下来。
 	for payload := range executedJobsCh {
 		cmd := cluster.PrepareJobExecutedCommand(payload.JobKey, payload.Error, payload.ExecutedTime)
 		// TODO handle errors. retry?

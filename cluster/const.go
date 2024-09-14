@@ -21,7 +21,7 @@ const (
 
 	InsertJobCommand
 	DeleteJobCommand
-	AcquireJobCommand
+	AssignJobCommand
 	JobExecutedCommand
 )
 
@@ -48,8 +48,8 @@ func PrepareDeleteJobCommand(key string) []byte {
 	return prepareCommand(DeleteJobCommand, DeleteJob{Key: key})
 }
 
-func PrepareAcquireJobCommand(jobKeys []string, peerID string) []byte {
-	return prepareCommand(AcquireJobCommand, AcquireJob{
+func PrepareAssignJobCommand(jobKeys []string, peerID string) []byte {
+	return prepareCommand(AssignJobCommand, AssignJob{
 		JobKeys: jobKeys,
 		PeerID:  peerID,
 	})

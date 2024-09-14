@@ -89,7 +89,7 @@ func (r *Raft) listenLeader() {
 			}
 			// 当前 leader
 			currentLeader := r.r.Leader()
-			// 发布事件
+			// 发布 leader 变更事件
 			select {
 			case r.changeLeaderCh <- ChangeLeaderNotification{
 				IsLeader:             r.r.State() == raft.Leader,

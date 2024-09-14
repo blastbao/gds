@@ -25,7 +25,7 @@ type ReadonlyState interface {
 type WritableState interface {
 	ReadonlyState
 	InsertJob(job jobs.Job) error
-	AcquireJob(key string, peerID string)
+	AssignJob(key string, peerID string)
 	DeleteJob(key string)
 	UnassignPeer(peerID string)
 	ApplyPostExecution(jobKey, err string, executedTime time.Time)
@@ -135,7 +135,7 @@ func (s *state) GetUnassignedJobsKeys() []string {
 	return keys
 }
 
-func (s *state) AcquireJob(key string, peerID string) {
+func (s *state) AssignJob(key string, peerID string) {
 	info, exists := s.Jobs[key]
 	if exists {
 		info.AssignedPeerID = peerID
