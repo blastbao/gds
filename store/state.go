@@ -34,13 +34,13 @@ type WritableState interface {
 }
 
 type JobInfo struct {
-	jobInfo
-	State jobs.State
+	jobInfo            // 任务信息
+	State   jobs.State // 任务状态
 }
 
 type jobInfo struct {
-	Job            jobs.Job
-	AssignedPeerID string
+	Job            jobs.Job // 任务基本信息：名称、类型、触发时间、数据
+	AssignedPeerID string   // 派发节点
 }
 
 type state struct {
@@ -52,7 +52,6 @@ func (s *state) InsertJob(job jobs.Job) error {
 	if _, exists := s.Jobs[job.Key()]; exists {
 		return ErrJobAlreadyExists
 	}
-
 	s.Jobs[job.Key()] = jobInfo{
 		Job: job,
 	}
@@ -68,7 +67,6 @@ func (s *state) GetJob(key string) (*JobInfo, error) {
 		jobInfo: j,
 		State:   calcJobState(j),
 	}
-
 	return info, nil
 }
 
@@ -84,11 +82,9 @@ func (s *state) GetJobsByType(jobType string) []JobInfo {
 				jobInfo: info,
 				State:   calcJobState(info),
 			}
-
 			result = append(result, jobInfo)
 		}
 	}
-
 	return result
 }
 
@@ -99,10 +95,8 @@ func (s *state) GetAllJobs() []JobInfo {
 			jobInfo: info,
 			State:   calcJobState(info),
 		}
-
 		result = append(result, jobInfo)
 	}
-
 	return result
 }
 

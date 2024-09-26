@@ -69,6 +69,7 @@ func (cl *ClusterHandler) HandleRemovePeerCommand(state store.WritableState, dat
 
 // HandleInsertJobCommand
 //
+// [重要]
 // raft 集群中每个节点在收到 "InsertJobCommand" 消息时，都会执行此函数；
 // 但仅当前节点为 leader 时，才会执行 job assign 逻辑，其会提交 "AssignJobCommand" 到状态机中，
 // 每个节点在收到 "AssignJobCommand" 消息时，检查是否有自己的任务，有则进行处理。
@@ -80,7 +81,7 @@ func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data
 		return nil, errors.WithMessage(err, "unmarshal cluster.InsertJob")
 	}
 
-	// 根据 type 范序列化 payload.Job ，因为不同 type 其配置结构不同
+	// 根据 typ 创建对应 job (工厂模式)，并反序列化
 	f := cl.typeProvider.Get(payload.Type)
 	job := f()
 	err = job.Unmarshal(payload.Job)
@@ -88,17 +89,16 @@ func (cl *ClusterHandler) HandleInsertJobCommand(state store.WritableState, data
 		return nil, errors.WithMessage(err, "unmarshal job data")
 	}
 
-	// 把 job 保存到 raft
+	// 把 job 保存到 raft fsm (保存到内存 map 中)
 	err = state.InsertJob(job)
 	if err != nil {
 		return nil, err
 	}
 
-	// [重要]
+	// [重要] 收到 insert job msg 后，leader 执行任务分发。
 	if cl.cluster.IsLeader() {
 		cl.assignJobs([]string{job.Key()})
 	}
-
 	return nil, nil
 }
 
@@ -122,7 +122,7 @@ func (cl *ClusterHandler) HandleDeleteJobCommand(state store.WritableState, data
 }
 
 func (cl *ClusterHandler) HandleAssignJobCommand(state store.WritableState, data []byte) (interface{}, error) {
-	// 解析消息
+	// 解析消息，包含 jobs 和其分配的 peerid
 	payload := cluster.AssignJob{}
 	err := json.Unmarshal(data, &payload)
 	if err != nil {
@@ -149,7 +149,7 @@ func (cl *ClusterHandler) HandleAssignJobCommand(state store.WritableState, data
 		// 更新状态机
 		state.AssignJob(key, payload.PeerID)
 
-		// [重要] 如果 job 分配给自己，就执行
+		// [重要] 如果 job 分配给自己，就保存下来
 		if cl.cluster.LocalID() == payload.PeerID {
 			cl.executor.AddJob(jobInfo.Job)
 		}
@@ -280,7 +280,7 @@ func (cl *ClusterHandler) assigningJobs(closeCh chan struct{}, assignJobsCh chan
 	assignJobsFn := func(keys []string) {
 		// round robin 取下一个 peer
 		peerID := cl.nextPeer.Get()
-		// 把任务绑定到 peer 上
+		// 构造 `AssignJob` cmd ，用于把 jobs 绑定到 peer 上
 		cmd := cluster.PrepareAssignJobCommand(keys, peerID)
 		// 提交到 raft 状态机
 		_, _ = cl.cluster.SyncApplyHelper(cmd, "AssignJobCommand")
@@ -288,6 +288,7 @@ func (cl *ClusterHandler) assigningJobs(closeCh chan struct{}, assignJobsCh chan
 
 	jobs := make([]string, 0, batchSize)
 
+	// 这里是聚合 assign cmd ，用于批量分配任务，避免提交 assign cmd 到 raft 过于频繁，加重负载
 	for {
 		select {
 		case assignJobs := <-assignJobsCh:

@@ -39,7 +39,7 @@ func (j *CronJob) Unmarshal(b []byte) error {
 	return err
 }
 
-// data is optional and may be nil
+// NewCronJob data is optional and may be nil
 func NewCronJob(jType, key string, cronSpec string, data interface{}) (*CronJob, error) {
 	baseJob, err := NewBaseJob(jType, key)
 	if err != nil {

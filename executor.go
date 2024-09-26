@@ -123,12 +123,14 @@ func (e *defaultExecutor) runJob(f *future, now time.Time) {
 	defer e.cleanup(f)
 	f.SetRunning()
 
+	// 获取 executor
 	exec, ok := e.registry.GetExecutor(f.job.Type())
 	if !ok {
 		e.logger.Error(fmt.Sprintf("defaultExecutor: not found executor for job type: %v", f.job.Type()))
 		return
 	}
 
+	// 执行
 	e.wg.Add(1)
 	defer e.wg.Done()
 	err := e.executeWithTimeout(exec, f.job)

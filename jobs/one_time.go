@@ -15,10 +15,10 @@ var (
 var _ Job = (*OneTimeJob)(nil)
 
 type OneTimeJob struct {
-	BaseJob
-	Data        interface{}
-	TriggerTime time.Time
-	Executed    bool
+	BaseJob                 // 任务名 + 任务类型
+	Data        interface{} // 数据
+	TriggerTime time.Time   // 触发时间
+	Executed    bool        // 已执行
 }
 
 func (j *OneTimeJob) NextTriggerTime() time.Time {
@@ -41,7 +41,7 @@ func (j *OneTimeJob) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, j)
 }
 
-// data is optional and may be nil
+// NewOneTimeJob data is optional and may be nil
 func NewOneTimeJob(jType, key string, triggerTime time.Time, data interface{}) (*OneTimeJob, error) {
 	baseJob, err := NewBaseJob(jType, key)
 	if err != nil {

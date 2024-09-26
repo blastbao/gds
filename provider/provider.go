@@ -13,23 +13,23 @@ type TypeProvider interface {
 }
 
 type typeProvider struct {
-	jobs map[string]NewJobFunc
+	factory map[string]NewJobFunc
 }
 
-func (tp *typeProvider) RegisterJobProvider(name string, newJob NewJobFunc) {
-	tp.jobs[name] = newJob
+func (tp *typeProvider) RegisterJobProvider(typ string, newJob NewJobFunc) {
+	tp.factory[typ] = newJob
 }
 
-func (tp *typeProvider) UnregisterJobProvider(name string) {
-	delete(tp.jobs, name)
+func (tp *typeProvider) UnregisterJobProvider(typ string) {
+	delete(tp.factory, typ)
 }
 
-func (tp *typeProvider) Get(name string) NewJobFunc {
-	return tp.jobs[name]
+func (tp *typeProvider) Get(typ string) NewJobFunc {
+	return tp.factory[typ]
 }
 
 func NewTypeProvider() TypeProvider {
 	return &typeProvider{
-		jobs: make(map[string]NewJobFunc),
+		factory: make(map[string]NewJobFunc),
 	}
 }

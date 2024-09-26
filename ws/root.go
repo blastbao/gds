@@ -35,8 +35,9 @@ func (h *SocketEventHandler) handleConnect(conn etp.Conn) {
 	if peerID == "" {
 		return
 	}
-
+	// 构造 add peer msg
 	command := cluster.PrepareAddPeerCommand(peerID)
+	// 提交到 raft
 	_, err := h.clusterClient.SyncApplyHelper(command, "AddPeerCommand")
 	if err != nil {
 		_ = conn.Close()

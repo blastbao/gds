@@ -52,10 +52,10 @@ func (s *scheduler) AddJob(job jobs.Job) error {
 		return err
 	}
 
-	// 构造 cmd
+	// 构造 insert job cmd
 	cmd := cluster.PrepareInsertJobCommand(job.Type(), b)
 
-	//
+	// 提交到 raft
 	_, err = s.raftAdapter.ClusterClient.SyncApplyHelper(cmd, "InsertJobCommand")
 	return err
 }

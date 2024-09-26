@@ -58,8 +58,8 @@ type Job interface {
 }
 
 type BaseJob struct {
-	JKey  string
-	JType string
+	JKey  string // 任务名
+	JType string // 任务类型
 }
 
 func (j *BaseJob) Key() string {
