@@ -1,3 +1,14 @@
+
+//// 服务启动时，各个 peer 如何从 snapshot 中加载归属于自己的任务？
+
+
+
+
+
+
+
+
+
 # Gds
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/integration-system/gds?color=6b9ded&sort=semver)](https://github.com/integration-system/gds/releases)
 [![Go API Reference](https://img.shields.io/badge/go-documentation-blue.svg?style=flat)](https://pkg.go.dev/github.com/integration-system/gds?tab=doc)
