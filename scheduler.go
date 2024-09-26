@@ -147,6 +147,7 @@ func NewScheduler(config config.ClusterConfiguration) (Scheduler, error) {
 	typeProvider := provider.NewTypeProvider()
 	clusterHandler := NewClusterHandler(typeProvider, executor, logger)
 
+	//
 	raftAdapter, err := NewRaftAdapter(config, clusterHandler, typeProvider, logger)
 	if err != nil {
 		return nil, err

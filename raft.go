@@ -81,11 +81,10 @@ func (ra *RaftAdapter) initMultiplexer(address string) (net.Listener, net.Listen
 }
 
 func (ra *RaftAdapter) initWebsocket(ctx context.Context, listener net.Listener) {
-	etpConfig := etp.ServerConfig{
+	etpServer := etp.NewServer(ctx, etp.ServerConfig{
 		InsecureSkipVerify:  true,
 		ConnectionReadLimit: defaultWsConnectionReadLimit,
-	}
-	etpServer := etp.NewServer(ctx, etpConfig)
+	})
 	ws.NewSocketEventHandler(etpServer, ra.ClusterClient, ra.logger).SubscribeAll()
 
 	httpMux := http.NewServeMux()

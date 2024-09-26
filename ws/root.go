@@ -19,12 +19,14 @@ type SocketEventHandler struct {
 }
 
 func (h *SocketEventHandler) SubscribeAll() {
-	h.server.OnConnect(h.handleConnect).
+	h.server.
+		OnConnect(h.handleConnect).
 		OnDisconnect(h.handleDisconnect).
 		OnError(h.handleError).
 		OnWithAck(cluster.ApplyCommandEvent, h.applyCommandOnLeader)
 }
 
+// 当 ws 建连后，注册 peer 到 raft lsm
 func (h *SocketEventHandler) handleConnect(conn etp.Conn) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -44,6 +46,7 @@ func (h *SocketEventHandler) handleConnect(conn etp.Conn) {
 	}
 }
 
+// 当 ws 断连后，从 raft lsm 中注销 peer 并关闭连接
 func (h *SocketEventHandler) handleDisconnect(conn etp.Conn, _ error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -54,7 +57,6 @@ func (h *SocketEventHandler) handleDisconnect(conn etp.Conn, _ error) {
 	if peerID == "" {
 		return
 	}
-
 	command := cluster.PrepareRemovePeerCommand(peerID)
 	_, err := h.clusterClient.SyncApplyHelper(command, "RemovePeerCommand")
 	if err != nil {

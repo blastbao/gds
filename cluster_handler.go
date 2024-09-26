@@ -109,15 +109,19 @@ func (cl *ClusterHandler) HandleDeleteJobCommand(state store.WritableState, data
 		return nil, errors.WithMessage(err, "unmarshal cluster.DelJob")
 	}
 
+	// 取 job
 	jobInfo, err := state.GetJob(payload.Key)
 	if err != nil {
 		return nil, err
 	}
+
+	// 如果该 job 归属于本机，则 cancel 掉
 	if cl.cluster.LocalID() == jobInfo.AssignedPeerID {
 		cl.executor.CancelJob(payload.Key)
 	}
-	state.DeleteJob(payload.Key)
 
+	// 从 raft fsm 中删除 job
+	state.DeleteJob(payload.Key)
 	return nil, nil
 }
 
@@ -135,20 +139,16 @@ func (cl *ClusterHandler) HandleAssignJobCommand(state store.WritableState, data
 		if err != nil {
 			continue
 		}
-
 		// if duplicate assignment
 		// 如果 job 已经分配给某个 peer ，skip
 		if jobInfo.AssignedPeerID == payload.PeerID {
 			continue
 		}
-
 		if jobInfo.State == jobs.StateExhausted {
 			continue
 		}
-
 		// 更新状态机
 		state.AssignJob(key, payload.PeerID)
-
 		// [重要] 如果 job 分配给自己，就保存下来
 		if cl.cluster.LocalID() == payload.PeerID {
 			cl.executor.AddJob(jobInfo.Job)
